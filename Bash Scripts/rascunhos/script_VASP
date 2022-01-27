@@ -1,0 +1,74 @@
+#! /bin/bash
+
+[ -z "`echo $vasp_std`" ] && vasp_std="mpirun -np 12 /home/mcardoso/vasp_std_mpi"
+
+# Experimental Lattice Parameters (angstrom [Å]) (Zhang)
+a_exp=`echo "5.22"|bc -l`
+b_exp=`echo "sqrt(3)*${a_exp}"|bc -l`
+c_exp=`echo "4.24"|bc -l`
+
+# Experimental Lattice ratios
+ba_exp=$(echo "${b_exp}/${a_exp}"|bc -l)
+ca_exp=$(echo "${c_exp}/${a_exp}"|bc -l)
+
+# V_exp was divided by 3
+v_exp=`echo "(${a_exp})^2*${c_exp}*sqrt(3)/2"|bc -l` 
+
+for i in 0.90 0.91 0.92 0.93 0.94; do
+
+# New Volume
+v=`echo "${i}*${v_exp}"|bc -l`
+
+for j in 0.95 0.96 0.97 0.98 0.99 1.00 1.01 1.02 1.03 1.04 1.05; do
+
+# New ratio c/a
+ca=`echo "${j}*${ca_exp}"|bc -l`
+
+# New lattice parameters
+a=`echo "e((1/3)*l((2*${v})/(${ca}*sqrt(3))))"|bc -l`
+b=`echo "sqrt(3)*${a}"|bc -l`
+c=`echo " ${ca}*${a}"|bc -l`
+
+declare -A arr
+# first vector
+arr1[0,0]=`echo "0.5*${a}"|bc`
+arr1[0,1]=`echo "-0.5*${b}"|bc`
+arr1[0,2]=0
+#second vector
+arr2[1,0]=`echo "0.5*${a}"|bc`
+arr2[1,1]=`echo "0.5*${b}"|bc`
+arr2[1,2]=0
+#third vector
+arr3[2,0]=0
+arr3[2,1]=0
+arr3[2,2]=${c}
+
+cat >POSCAR <<!
+Fe2MnGe:
+1.000000
+   `echo "scale=10;${arr1[0,0]}/1"|bc -l`   `echo "scale=10;${arr1[0,1]}/1"|bc -l`   `echo "scale=10;${arr1[0,2]}/1"|bc -l|awk '{printf "%.10f\n", $0}'`
+   `echo "scale=10;${arr2[1,0]}/1"|bc -l|awk '{printf "%.10f\n", $0}'`    `echo "scale=10;${arr2[1,1]}/1"|bc -l`   `echo "scale=10;${arr2[1,2]}/1"|bc -l|awk '{printf "%.10f\n", $0}'`
+   `echo "scale=10;${arr3[2,0]}/1"|bc -l|awk '{printf "%.10f\n", $0}'`    `echo "scale=10;${arr3[2,1]}/1"|bc -l|awk '{printf "%.10f\n", $0}'`   `echo "scale=10;${arr3[2,2]}/1"|bc -l`   
+   Fe   Mn   Ge
+    4    2    2
+Direct
+     0.166666666         0.333333333         0.750000000 !T1
+     0.666666666         0.833333333         0.750000000 !T2
+     0.333333333         0.166666666         0.250000000 !B1
+     0.833333333         0.666666666         0.250000000 !B2
+     0.166666666         0.833333333         0.750000000 !T3
+     0.833333333         0.166666666         0.250000000 !B3
+     0.666666666         0.333333333         0.750000000 !T4
+     0.333333333         0.666666666         0.250000000 !B4
+!
+echo "v= $i"
+echo "ca= $j"
+
+$vasp_std
+
+E=`awk '/F=/ {print $0}' OSZICAR` ; echo $i $j  $E  >> SUMMARY
+done 
+done
+
+
+
